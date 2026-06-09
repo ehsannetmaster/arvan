@@ -56,7 +56,9 @@ prometheus:
   prometheusSpec:
     externalUrl: https://prometheus.idistance.ir
     retention: 15d
-    retentionSize: "8GB"
+    # Size-based cap: delete oldest blocks once on-disk data exceeds 9GB.
+    # Sits just under the 10Gi PV (~84%), leaving headroom for WAL/compaction.
+    retentionSize: "9GB"
     # In a lab you often add ServiceMonitors/Rules without the chart's release
     # label — tell Prometheus to pick up ALL of them, not just the chart's own.
     serviceMonitorSelectorNilUsesHelmValues: false
