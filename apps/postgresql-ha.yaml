@@ -36,7 +36,9 @@ spec:
       targetRevision: HEAD
       path: postgres
       directory:
-        include: local-storage.yaml
+        # Static PVs + the PrometheusRule alerts. Brace-glob so values.yaml (a
+        # Helm values file) and README.md are never rendered as manifests.
+        include: '{local-storage.yaml,prometheus-rules.yaml}'
 
   destination:
     server: https://kubernetes.default.svc

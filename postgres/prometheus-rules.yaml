@@ -1,0 +1,122 @@
+# Prometheus alerting rules for the PostgreSQL HA cluster.
+#
+# Picked up automatically: monitoring/values.yaml sets
+# ruleSelectorNilUsesHelmValues=false, so Prometheus selects ALL PrometheusRule
+# objects in ALL namespaces — no special `release` label or namespace needed.
+# Metrics come from the chart's postgres_exporter (ServiceMonitor scraped).
+#
+# Rendered by the postgresql-ha Application -> lands in the `arvan` namespace.
+#
+# Severity convention matches kube-prometheus-stack's Alertmanager routing:
+#   severity: critical | warning
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: postgresql-ha-rules
+spec:
+  groups:
+    - name: postgresql-ha.availability
+      rules:
+        - alert: PostgresqlInstanceDown
+          expr: pg_up == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL instance down ({{ $labels.pod }})"
+            description: "pg_up == 0 on instance {{ $labels.instance }} (pod {{ $labels.pod }}) for >1m. The exporter can't reach this Postgres."
+
+        # The next three depend on the exporter's replication collector
+        # (pg_replication_is_replica: 0 = primary, 1 = standby). If that metric
+        # is absent on your exporter build, these won't fire — verify with
+        # `pg_replication_is_replica` in Prometheus and adjust if needed.
+        - alert: PostgresqlNoPrimary
+          expr: count(pg_replication_is_replica == 0) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL has no primary"
+            description: "No instance reports primary (pg_replication_is_replica==0) for >2m. repmgr failover may be stuck — check `repmgr cluster show`."
+
+        - alert: PostgresqlSplitBrain
+          expr: count(pg_replication_is_replica == 0) > 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL split-brain: multiple primaries"
+            description: "{{ $value }} instances report primary simultaneously for >2m. Investigate immediately — risk of divergent writes."
+
+        - alert: PostgresqlStandbyMissing
+          expr: count(pg_replication_is_replica == 1) < 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Fewer standbys than expected"
+            description: "Only {{ $value }} standby(s) online (expected 2) for >5m. A replica pod may be down or not cloned."
+
+    - name: postgresql-ha.replication
+      rules:
+        # pg_replication_lag is in seconds. Some exporter versions name it
+        # pg_replication_lag_seconds — switch the metric if this never fires.
+        - alert: PostgresqlReplicationLagHigh
+          expr: max by (instance, pod) (pg_replication_lag) > 60
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Replication lag high ({{ $labels.pod }})"
+            description: "Standby {{ $labels.pod }} is {{ $value }}s behind the primary for >5m."
+
+    - name: postgresql-ha.saturation
+      rules:
+        - alert: PostgresqlTooManyConnections
+          expr: |
+            sum by (instance) (pg_stat_database_numbackends)
+              / on (instance) group_left sum by (instance) (pg_settings_max_connections)
+            > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Connection usage >80% ({{ $labels.instance }})"
+            description: "{{ $labels.instance }} is using {{ $value | humanizePercentage }} of max_connections for >5m. Consider connection pooling limits."
+
+        - alert: PostgresqlHighRollbackRate
+          expr: |
+            sum by (instance) (rate(pg_stat_database_xact_rollback[5m]))
+              / (sum by (instance) (rate(pg_stat_database_xact_commit[5m]))
+                 + sum by (instance) (rate(pg_stat_database_xact_rollback[5m])))
+            > 0.1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High transaction rollback rate ({{ $labels.instance }})"
+            description: "{{ $value | humanizePercentage }} of transactions are rolling back on {{ $labels.instance }} (>10% for 10m)."
+
+        - alert: PostgresqlLowCacheHitRatio
+          expr: |
+            sum by (instance) (rate(pg_stat_database_blks_hit[5m]))
+              / (sum by (instance) (rate(pg_stat_database_blks_hit[5m]))
+                 + sum by (instance) (rate(pg_stat_database_blks_read[5m])))
+            < 0.9
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low cache hit ratio ({{ $labels.instance }})"
+            description: "Buffer cache hit ratio is {{ $value | humanizePercentage }} on {{ $labels.instance }} (<90% for 30m). Working set may exceed shared_buffers."
+
+    - name: postgresql-ha.errors
+      rules:
+        - alert: PostgresqlDeadlocksDetected
+          expr: increase(pg_stat_database_deadlocks[5m]) > 5
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Deadlocks detected ({{ $labels.datname }})"
+            description: "{{ $value }} deadlocks in 5m on database {{ $labels.datname }} ({{ $labels.instance }})."
