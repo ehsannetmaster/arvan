@@ -32,7 +32,7 @@ spec:
         # Render the static storage manifest AND the Postgres Grafana dashboard
         # ConfigMap. Brace-glob so values.yaml (a Helm values file, not a
         # manifest) is never picked up here.
-        include: '{local-storage.yaml,postgres-dashboard.yaml}'
+        include: '{local-storage.yaml,postgres-dashboard.yaml,postgres-dashboard-9628.yaml}'
 
   destination:
     server: https://kubernetes.default.svc
