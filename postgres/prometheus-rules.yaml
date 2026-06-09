@@ -31,7 +31,9 @@ spec:
         # is absent on your exporter build, these won't fire — verify with
         # `pg_replication_is_replica` in Prometheus and adjust if needed.
         - alert: PostgresqlNoPrimary
-          expr: count(pg_replication_is_replica == 0) == 0
+          # absent(): fires when NO series reports primary (value 0). Using
+          # count(...)==0 would never fire — an empty vector isn't 0.
+          expr: absent(pg_replication_is_replica == 0)
           for: 2m
           labels:
             severity: critical
@@ -49,7 +51,9 @@ spec:
             description: "{{ $value }} instances report primary simultaneously for >2m. Investigate immediately — risk of divergent writes."
 
         - alert: PostgresqlStandbyMissing
-          expr: count(pg_replication_is_replica == 1) < 2
+          # sum() of the replica flag = number of standbys online (primary=0).
+          # Robust when a standby is DOWN (count(...==1) would go empty instead).
+          expr: sum(pg_replication_is_replica) < 2
           for: 5m
           labels:
             severity: warning
@@ -75,7 +79,7 @@ spec:
         - alert: PostgresqlTooManyConnections
           expr: |
             sum by (instance) (pg_stat_database_numbackends)
-              / on (instance) group_left sum by (instance) (pg_settings_max_connections)
+              / on (instance) sum by (instance) (pg_settings_max_connections)
             > 0.8
           for: 5m
           labels:

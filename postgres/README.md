@@ -184,6 +184,41 @@ kubectl -n arvan get servicemonitor                       # postgresql-ha metric
 > versions name it `pg_replication_lag_seconds`. If that panel is empty, edit
 > the query — the rest of the dashboard uses rock-stable `pg_stat_database_*`.
 
+## Alerting
+
+Alert rules ship as a `PrometheusRule` —
+[postgres/prometheus-rules.yaml](prometheus-rules.yaml) — rendered by the
+postgresql-ha Application into the `arvan` namespace. Because
+`ruleSelectorNilUsesHelmValues: false` is set in
+[monitoring/values.yaml](../monitoring/values.yaml), Prometheus loads **every**
+`PrometheusRule` in **all** namespaces automatically — no special label or
+namespace placement needed (unlike the Grafana dashboards, which must sit in
+`monitoring` for the sidecar).
+
+| Alert | Fires when | Severity |
+|-------|-----------|----------|
+| `PostgresqlInstanceDown` | `pg_up == 0` for 1m | critical |
+| `PostgresqlNoPrimary` | no instance reports primary for 2m | critical |
+| `PostgresqlSplitBrain` | >1 instance reports primary for 2m | critical |
+| `PostgresqlStandbyMissing` | fewer than 2 standbys online for 5m | warning |
+| `PostgresqlReplicationLagHigh` | standby >60s behind for 5m | warning |
+| `PostgresqlTooManyConnections` | >80% of `max_connections` for 5m | warning |
+| `PostgresqlHighRollbackRate` | >10% transactions rolling back for 10m | warning |
+| `PostgresqlLowCacheHitRatio` | buffer cache hit <90% for 30m | warning |
+| `PostgresqlDeadlocksDetected` | >5 deadlocks in 5m | warning |
+
+The replication-based alerts (`NoPrimary`, `SplitBrain`, `StandbyMissing`,
+`ReplicationLagHigh`) depend on the exporter's `pg_replication_is_replica` /
+`pg_replication_lag` metrics — same caveat as the dashboard. Verify in Prometheus
+and adjust the metric name if your exporter differs.
+
+Verify after sync:
+```bash
+kubectl -n arvan get prometheusrule postgresql-ha-rules
+# In Prometheus UI (prometheus.idistance.ir) -> Alerts: the postgresql-ha.* groups appear.
+# Routing to receivers (email/Slack/etc.) is Alertmanager config — separate from these rules.
+```
+
 ## Troubleshooting
 
 Errors hit during the initial bring-up, and their fixes:
