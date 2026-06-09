@@ -1,0 +1,131 @@
+# Grafana dashboard for the ip-country-api service, fed by the app's own
+# /metrics endpoint (prometheus-fastapi-instrumentator + a custom
+# ip_country_lookups_total counter), scraped via
+# ip-country-api/k8s/servicemonitor.yaml.
+#
+# Delivery mechanism: the kube-prometheus-stack Grafana runs the dashboard
+# SIDECAR, which imports any ConfigMap in the monitoring namespace carrying the
+# label `grafana_dashboard: "1"`. The JSON is embedded (no grafana.com gnetId),
+# so nothing is fetched at runtime — important on this geo-blocked cluster.
+#
+# Uses a `$datasource` template variable (type: prometheus) that auto-selects the
+# default Prometheus datasource, so it needs no manual wiring on import. Add this
+# filename to the `include:` glob in apps/kube-prometheus-stack.yaml so the app
+# renders it into the `monitoring` namespace alongside Grafana.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ip-country-api-dashboard
+  labels:
+    grafana_dashboard: "1"
+data:
+  ip-country-api.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "title": "IP Country API",
+      "uid": "ip-country-api",
+      "tags": ["ip-country", "arvan"],
+      "schemaVersion": 39,
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "templating": {
+        "list": [
+          {
+            "name": "datasource",
+            "label": "Datasource",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {},
+            "hide": 0
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "stat", "title": "Request rate",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [ { "refId": "A", "expr": "sum(rate(http_requests_total{handler!=\"/metrics\"}[5m]))" } ]
+        },
+        {
+          "type": "stat", "title": "Error ratio (4xx/5xx)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "color": { "mode": "thresholds" },
+            "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 } ] } }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "targets": [ { "refId": "A", "expr": "sum(rate(http_requests_total{status=~\"4xx|5xx\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1)" } ]
+        },
+        {
+          "type": "stat", "title": "p95 latency",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 4, "w": 5, "x": 10, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" },
+            "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.25 }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [ { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_highr_seconds_bucket[5m])))" } ]
+        },
+        {
+          "type": "stat", "title": "Lookups (1h)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 4, "w": 5, "x": 15, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [ { "refId": "A", "expr": "sum(increase(ip_country_lookups_total[1h]))" } ]
+        },
+        {
+          "type": "stat", "title": "Countries seen",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [ { "refId": "A", "expr": "count(count by (country_code) (ip_country_lookups_total))" } ]
+        },
+        {
+          "type": "timeseries", "title": "Request rate by endpoint",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+          "targets": [
+            { "refId": "A", "expr": "sum by (handler) (rate(http_requests_total[5m]))", "legendFormat": "{{handler}}" }
+          ]
+        },
+        {
+          "type": "timeseries", "title": "Request rate by status",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10, "stacking": { "mode": "normal" } } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+          "targets": [
+            { "refId": "A", "expr": "sum by (status) (rate(http_requests_total[5m]))", "legendFormat": "{{status}}" }
+          ]
+        },
+        {
+          "type": "timeseries", "title": "Latency quantiles",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 0 } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+          "targets": [
+            { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_highr_seconds_bucket[5m])))", "legendFormat": "p50" },
+            { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_highr_seconds_bucket[5m])))", "legendFormat": "p95" },
+            { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_highr_seconds_bucket[5m])))", "legendFormat": "p99" }
+          ]
+        },
+        {
+          "type": "bargauge", "title": "Top countries (1h)",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "continuous-GrYlRd" } }, "overrides": [] },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [
+            { "refId": "A", "expr": "topk(10, sum by (country_code) (increase(ip_country_lookups_total[1h])))", "legendFormat": "{{country_code}}", "instant": true }
+          ]
+        }
+      ]
+    }

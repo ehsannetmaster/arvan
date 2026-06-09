@@ -1,0 +1,26 @@
+# Alerting rule for the ip-country-api service.
+#
+# Picked up automatically: monitoring/values.yaml sets
+# ruleSelectorNilUsesHelmValues=false, so Prometheus selects ALL PrometheusRule
+# objects in ALL namespaces — no `release` label or special namespace needed
+# (same convention as postgres/prometheus-rules.yaml).
+#
+# `up` is the synthetic per-target metric Prometheus writes for every scrape;
+# the ip-country-api ServiceMonitor labels it job="ip-country-api".
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ip-country-api-rules
+  namespace: arvan
+spec:
+  groups:
+    - name: ip-country-api.availability
+      rules:
+        - alert: IpCountryApiTargetDown
+          expr: up{job="ip-country-api"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ip-country-api target down ({{ $labels.pod }})"
+            description: "Prometheus cannot scrape ip-country-api ({{ $labels.instance }}, pod {{ $labels.pod }}) for >2m — the pod is down or /metrics is unreachable."
