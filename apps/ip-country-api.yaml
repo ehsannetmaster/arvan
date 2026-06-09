@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ip-country-api
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Plain Kubernetes manifests (Deployment + Service + Ingress) rendered straight
+  # from this git repo. CI rewrites the Deployment image tag to the built commit
+  # SHA on each push, so a new image == a new commit == an OutOfSync app to sync.
+  source:
+    repoURL: https://github.com/ehsannetmaster/arvan.git
+    targetRevision: HEAD
+    path: ip-country-api/k8s
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arvan
+
+  # No `automated:` block — sync is MANUAL, matching the rest of this repo.
+  # After CI pushes a new image tag commit, the app shows OutOfSync; sync via the
+  # UI or `argocd app sync ip-country-api`.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
