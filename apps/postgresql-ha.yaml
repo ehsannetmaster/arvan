@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgresql-ha
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Multi-source (mirrors the kube-prometheus-stack app layout):
+  #   1) the postgresql-ha chart from the Bitnami Helm repo,
+  #   2) THIS git repo as the $arvan ref (provides postgres/values.yaml),
+  #   3) THIS git repo again rendering the static StorageClass + PVs manifest.
+  # Source 3 carries sync-wave "-5" so postgres-local PVs land before the
+  # chart's StatefulSet PVCs need to bind.
+  sources:
+    - repoURL: https://charts.bitnami.com/bitnami
+      chart: postgresql-ha
+      targetRevision: 16.3.2
+      helm:
+        releaseName: postgresql-ha
+        valueFiles:
+          - $arvan/postgres/values.yaml
+    - repoURL: https://github.com/ehsannetmaster/arvan.git
+      targetRevision: HEAD
+      ref: arvan
+    - repoURL: https://github.com/ehsannetmaster/arvan.git
+      targetRevision: HEAD
+      path: postgres
+      directory:
+        include: local-storage.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arvan
+
+  # No `automated:` block — sync is MANUAL, matching the rest of this repo.
+  # Argo CD shows the app OutOfSync until you sync it (UI or
+  # `argocd app sync postgresql-ha`). Add `--prune` to remove orphans.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    # Bootstrap (primary election + standby clone via repmgr) can take a couple
+    # of minutes; give the sync room to settle on first run.
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m
