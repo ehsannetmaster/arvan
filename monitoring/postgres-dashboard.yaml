@@ -177,6 +177,19 @@ data:
             { "refId": "A", "expr": "sum(rate(pg_stat_database_deadlocks{instance=~\"$instance\", datname=~\"$datname\"}[5m]))", "legendFormat": "deadlocks" },
             { "refId": "B", "expr": "sum(rate(pg_stat_database_conflicts{instance=~\"$instance\", datname=~\"$datname\"}[5m]))", "legendFormat": "conflicts" }
           ]
+        },
+        {
+          "type": "stat", "title": "Cluster role by node (primary / replica)",
+          "description": "pg_replication_is_replica: 0 = PRIMARY, 1 = REPLICA. Joined with kube_pod_info (kube-state-metrics) to label each series with the node its pod runs on. If empty, your exporter may not expose this metric — check 'pg_replication_is_replica' in Prometheus.",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "gridPos": { "h": 5, "w": 24, "x": 0, "y": 28 },
+          "fieldConfig": { "defaults": { "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "PRIMARY", "color": "green", "index": 0 },
+              "1": { "text": "REPLICA", "color": "blue", "index": 1 } } }
+          ], "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null } ] } }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" }, "colorMode": "background", "textMode": "value_and_name", "orientation": "horizontal" },
+          "targets": [ { "refId": "A", "instant": true, "expr": "pg_replication_is_replica{instance=~\"$instance\"} * on(namespace, pod) group_left(node) kube_pod_info", "legendFormat": "{{node}}" } ]
         }
       ]
     }
