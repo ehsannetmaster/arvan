@@ -1,0 +1,99 @@
+# Static `local` storage for PostgreSQL HA — one PV per node (node1/2/3).
+#
+# Unlike monitoring/local-storage.yaml (all PVs pinned to node3), these PVs are
+# split across all three nodes so the three PostgreSQL replicas — held apart by
+# HARD pod anti-affinity — each find a local PV on their own node. This is what
+# makes a single node failure survivable.
+#
+# Dedicated StorageClass `postgres-local` (separate from `local-storage`) so a
+# Postgres PVC can ONLY bind a Postgres PV — no accidental cross-binding with
+# the monitoring volumes.
+#
+# PREREQUISITE — create the directories BEFORE syncing (no provisioner will
+# mkdir them):
+#   ssh node1 'sudo mkdir -p /mnt/local-storage/postgres && sudo chmod 0777 /mnt/local-storage/postgres'
+#   ssh node2 'sudo mkdir -p /mnt/local-storage/postgres && sudo chmod 0777 /mnt/local-storage/postgres'
+#   ssh node3 'sudo mkdir -p /mnt/local-storage/postgres && sudo chmod 0777 /mnt/local-storage/postgres'
+#
+# NOTE: `local` PVs only support reclaimPolicy: Retain. If you delete the stack
+# and recreate it, clear the leftover data dirs on each node (or the PVs stay
+# "Released" and won't rebind).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: postgres-local
+  annotations:
+    # Apply storage before the chart's PVCs when synced as one Application.
+    argocd.argoproj.io/sync-wave: "-5"
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-local-pv-node1
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  capacity:
+    storage: 8Gi          # MUST match persistence.size in postgres/values.yaml
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: postgres-local
+  local:
+    path: /mnt/local-storage/postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["node1"]   # verify with `kubectl get nodes`
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-local-pv-node2
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  capacity:
+    storage: 8Gi          # MUST match persistence.size in postgres/values.yaml
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: postgres-local
+  local:
+    path: /mnt/local-storage/postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["node2"]   # verify with `kubectl get nodes`
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-local-pv-node3
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  capacity:
+    storage: 8Gi          # MUST match persistence.size in postgres/values.yaml
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: postgres-local
+  local:
+    path: /mnt/local-storage/postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["node3"]

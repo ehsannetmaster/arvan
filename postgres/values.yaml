@@ -1,0 +1,94 @@
+# postgresql-ha values — Arvan lab cluster
+# Chart: postgresql-ha 16.3.2  (PostgreSQL 17.6 + repmgr, Pgpool-II 4.6)
+#
+# Cluster conventions (see postgres/README.md, kube-prometheus-stack-argocd.md):
+#   * All 3 nodes are control-plane + worker (schedulable, taint removed). So HA
+#     here = 3 PostgreSQL replicas, one per node, spread by HARD anti-affinity.
+#     This gives repmgr a real 3-node quorum (no 2-node split-brain). Survives ONE node.
+#   * No LoadBalancer (no MetalLB) -> Pgpool Service stays ClusterIP.
+#   * Persistence uses the static `postgres-local` StorageClass — pre-created
+#     `local` PVs on node1 + node2 + node3 (no provisioner). Size MUST match PVs (8Gi).
+#   * Secrets are created OUT OF BAND (public repo) — see existingSecret below.
+#
+# IMAGES — Bitnami archived its free Docker images on 2025-08-28; the newest
+# `docker.io/bitnami/*` tags now 404. Every image below is repointed to the
+# frozen `bitnamilegacy/*` archive at the last tags published before the cutoff
+# (verified to exist). These get no further updates — mirror them if you keep
+# this cluster long-term.
+
+#############################################
+# PostgreSQL (with repmgr) — the data tier
+#############################################
+postgresql:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql-repmgr
+    tag: 17.6.0-debian-12-r2
+
+  # One primary + two standbys, forced onto three different nodes (real quorum).
+  replicaCount: 3
+  podAntiAffinityPreset: hard
+
+  # Application user/database created on first boot. The superuser (postgres),
+  # this user's password, and the repmgr password all come from the Secret.
+  username: appuser
+  database: appdb
+  existingSecret: postgresql-ha-credentials   # keys: postgres-password, password, repmgr-password
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+#############################################
+# Pgpool-II — the smart proxy / failover router
+#############################################
+pgpool:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/pgpool
+    tag: 4.6.3-debian-12-r0
+
+  # Two Pgpool replicas spread across two of the three nodes — enough for the
+  # proxy tier to survive a node loss. Pgpool is stateless (no PV needed).
+  replicaCount: 2
+  podAntiAffinityPreset: hard
+
+  adminUsername: admin
+  existingSecret: pgpool-credentials          # key: admin-password
+
+#############################################
+# Metrics — postgres_exporter + ServiceMonitor
+#############################################
+# kube-prometheus-stack runs with serviceMonitorSelectorNilUsesHelmValues:false,
+# so it will scrape this ServiceMonitor automatically.
+metrics:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgres-exporter
+    tag: 0.17.1-debian-12-r16
+  serviceMonitor:
+    enabled: true
+
+#############################################
+# Volume permissions — chown the local dir to uid/gid 1001 on first mount
+#############################################
+# `local` PVs are plain host directories; this init container fixes ownership
+# so the non-root postgres process (uid 1001) can write. README also chmods them.
+volumePermissions:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/os-shell
+    tag: 12-debian-12-r51
+
+#############################################
+# Persistence — static local PVs (see postgres/local-storage.yaml)
+#############################################
+persistence:
+  enabled: true
+  storageClass: postgres-local
+  size: 8Gi
