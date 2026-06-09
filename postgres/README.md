@@ -28,13 +28,21 @@ A highly-available PostgreSQL deployed via the **Bitnami `postgresql-ha`** chart
 > ⚠️ **Maintenance caveat.** With hard anti-affinity + 3 nodes, draining one node
 > leaves that replica's pod unschedulable until the node returns (no spare node).
 
-## Images — Bitnami legacy
+## Bitnami 2025 changes — chart AND images
 
-Bitnami archived its free Docker images on **2025-08-28**; the newest
-`docker.io/bitnami/*` tags now 404 (`ImagePullBackOff`). All four images in
-[values.yaml](values.yaml) are repointed to the frozen `bitnamilegacy/*` archive
-at the last pre-cutoff tags (verified present). They receive **no further
-updates** — mirror them to your own registry if this cluster is long-lived.
+On **2025-08-28** Bitnami stopped publishing to Docker Hub the usual way. Two
+separate fallouts, both handled here:
+
+1. **Chart distribution → OCI only.** The old HTTP repo
+   (`https://charts.bitnami.com/bitnami`) no longer serves tarballs; its
+   `index.yaml` now points at OCI refs, so `helm pull --repo …` fails with
+   `invalid_reference: invalid tag`. The app pulls the chart from the **OCI
+   registry** `registry-1.docker.io/bitnamicharts` instead (see step 3 below).
+2. **Container images → archived.** The newest `docker.io/bitnami/*` tags now
+   404 (`ImagePullBackOff`). All four images in [values.yaml](values.yaml) are
+   repointed to the frozen `bitnamilegacy/*` archive at the last pre-cutoff tags
+   (verified present). They get **no further updates** — mirror them to your own
+   registry if this cluster is long-lived.
 
 ## Prerequisites — do these BEFORE syncing
 
@@ -71,6 +79,32 @@ The key names above are exactly what the chart reads (`postgresql.existingSecret
 expects `postgres-password` / `password` / `repmgr-password`;
 `pgpool.existingSecret` expects `admin-password`). If a pod logs a missing-key
 error, recheck these names.
+
+### 3. Register the Bitnami OCI registry in Argo CD
+
+The chart is pulled via OCI (see "Bitnami 2025 changes" above), so Argo CD must
+have the registry registered with `enableOCI=true`. This is cluster config, so
+apply it out of band (it must exist before the app can pull the chart):
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bitnamicharts-oci
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: bitnamicharts
+  type: helm
+  url: registry-1.docker.io/bitnamicharts
+  enableOCI: "true"
+EOF
+```
+
+No credentials needed — these charts are public (anonymous pull). If you hit
+Docker Hub rate limits, add `username`/`password` keys with a Docker Hub token.
 
 ## Deploy
 

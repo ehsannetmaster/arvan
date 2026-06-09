@@ -9,13 +9,20 @@ spec:
   project: default
 
   # Multi-source (mirrors the kube-prometheus-stack app layout):
-  #   1) the postgresql-ha chart from the Bitnami Helm repo,
+  #   1) the postgresql-ha chart from the Bitnami OCI registry,
   #   2) THIS git repo as the $arvan ref (provides postgres/values.yaml),
   #   3) THIS git repo again rendering the static StorageClass + PVs manifest.
   # Source 3 carries sync-wave "-5" so postgres-local PVs land before the
   # chart's StatefulSet PVCs need to bind.
+  #
+  # NOTE: as of 2025-08-28 Bitnami stopped serving chart tarballs over the old
+  # HTTP repo (https://charts.bitnami.com/bitnami) — its index.yaml now lists
+  # versions as OCI refs, so `helm pull --repo …` fails with
+  # "invalid_reference: invalid tag". The chart is pulled from the OCI registry
+  # instead. This requires the argocd repo to be registered with enableOCI=true
+  # (see postgres/README.md) — apply that Secret BEFORE syncing this app.
   sources:
-    - repoURL: https://charts.bitnami.com/bitnami
+    - repoURL: registry-1.docker.io/bitnamicharts
       chart: postgresql-ha
       targetRevision: 16.3.2
       helm:
