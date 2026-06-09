@@ -34,6 +34,9 @@ grafana:
     accessModes: ["ReadWriteOnce"]
     size: 5Gi
 
+  deploymentStrategy:
+    type: Recreate
+
   # Grafana sits behind the external nginx (https). Tell it its public URL so it
   # builds correct https links/redirects regardless of the proxy hop scheme.
   grafana.ini:
