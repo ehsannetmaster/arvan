@@ -29,7 +29,10 @@ spec:
       targetRevision: HEAD
       path: monitoring
       directory:
-        include: local-storage.yaml
+        # Render the static storage manifest AND the Postgres Grafana dashboard
+        # ConfigMap. Brace-glob so values.yaml (a Helm values file, not a
+        # manifest) is never picked up here.
+        include: '{local-storage.yaml,postgres-dashboard.yaml}'
 
   destination:
     server: https://kubernetes.default.svc

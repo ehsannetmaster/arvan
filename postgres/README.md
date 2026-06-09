@@ -46,7 +46,7 @@ separate fallouts, both handled here:
 
 ## Prerequisites — do these BEFORE syncing
 
-### 1. Create the local PV directories on each worker
+### 1. Create the local PV directories on each node
 
 No provisioner will `mkdir` these for you:
 
@@ -70,15 +70,20 @@ kubectl -n arvan create secret generic postgresql-ha-credentials \
   --from-literal=password='<appuser-password>' \
   --from-literal=repmgr-password='<repmgr-password>'
 
-# Pgpool admin (PCP) password
+# Pgpool: admin (PCP) password AND the streaming-replication check password.
+# sr-check-password is REQUIRED — the postgresql pods read it from THIS secret
+# too (POSTGRESQL_SR_CHECK_PASSWORD); omitting it makes Postgres refuse to start.
 kubectl -n arvan create secret generic pgpool-credentials \
-  --from-literal=admin-password='<pgpool-admin-password>'
+  --from-literal=admin-password='<pgpool-admin-password>' \
+  --from-literal=sr-check-password='<sr-check-password>'
 ```
 
-The key names above are exactly what the chart reads (`postgresql.existingSecret`
-expects `postgres-password` / `password` / `repmgr-password`;
-`pgpool.existingSecret` expects `admin-password`). If a pod logs a missing-key
-error, recheck these names.
+The key names above are exactly what the chart reads:
+- `postgresql.existingSecret` → `postgres-password`, `password`, `repmgr-password`
+- `pgpool.existingSecret` → `admin-password`, `sr-check-password`
+
+If a pod logs a missing-key error (or `POSTGRESQL_SR_CHECK_PASSWORD ... empty`),
+recheck these names.
 
 ### 3. Register the Bitnami OCI registry in Argo CD
 
@@ -115,6 +120,17 @@ argocd app sync postgresql-ha
 # (or use the Argo CD UI Sync buttons — sync is manual throughout this repo)
 ```
 
+> ⚠️ **Editing `apps/postgresql-ha.yaml` does nothing until `root` is synced.**
+> The root app-of-apps owns the live `postgresql-ha` Application; a change to the
+> Application manifest (e.g. the chart `repoURL`) only reaches the cluster when
+> you sync `root`. And because Argo CD caches the Git revision (~3 min poll), a
+> `root` that already shows *Synced/Healthy* may be sitting on an old commit —
+> hard-refresh it so it sees your latest push first:
+> ```bash
+> argocd app get root --hard-refresh && argocd app sync root
+> argocd app get postgresql-ha -o yaml | grep repoURL   # confirm the live spec updated
+> ```
+
 ## Verify
 
 ```bash
@@ -131,6 +147,72 @@ kubectl -n arvan run psql --rm -it --restart=Never \
   --env=PGPASSWORD='<appuser-password>' -- \
   psql -h postgresql-ha-pgpool -U appuser -d appdb -c '\conninfo'
 ```
+
+## Grafana dashboard
+
+Metrics come from the chart's **postgres_exporter** (`metrics.enabled` +
+`metrics.serviceMonitor.enabled` in [values.yaml](values.yaml)); Prometheus
+scrapes the ServiceMonitor cluster-wide.
+
+The dashboard is shipped as a ConfigMap —
+[monitoring/postgres-dashboard.yaml](../monitoring/postgres-dashboard.yaml) —
+labeled `grafana_dashboard: "1"`, which the kube-prometheus-stack Grafana
+**sidecar** auto-imports from the `monitoring` namespace. The JSON is embedded
+(no grafana.com fetch at runtime — this cluster is geo-blocked) and uses a
+`$datasource` variable that binds to the default Prometheus automatically.
+
+It is rendered by the **kube-prometheus-stack** Application (not postgresql-ha),
+so deploying it means syncing *that* app:
+
+```bash
+# The include-glob change in apps/kube-prometheus-stack.yaml only reaches the
+# live app after root is synced (see the Deploy warning), then sync the stack:
+argocd app get root --hard-refresh && argocd app sync root
+argocd app sync kube-prometheus-stack
+```
+
+Then in Grafana: **Dashboards → "PostgreSQL HA (postgres_exporter)"** (appears
+within ~1 min of the ConfigMap landing). Verify the data path first if panels
+are empty:
+
+```bash
+kubectl -n arvan get servicemonitor                       # postgresql-ha metrics SM exists
+# In Prometheus UI (prometheus.idistance.ir) run:  pg_up   -> should return 1 per instance
+```
+
+> The "Replication lag (s)" panel uses `pg_replication_lag`; some exporter
+> versions name it `pg_replication_lag_seconds`. If that panel is empty, edit
+> the query — the rest of the dashboard uses rock-stable `pg_stat_database_*`.
+
+## Troubleshooting
+
+Errors hit during the initial bring-up, and their fixes:
+
+**`error fetching chart … helm pull --repo https://charts.bitnami.com/bitnami … invalid_reference: invalid tag`**
+The live app is still using the old HTTP repo. Causes, in order of likelihood:
+1. `root` not synced (or stale) → the live `postgresql-ha` still has the old
+   `repoURL`. Hard-refresh + sync `root` (see the Deploy warning), confirm with
+   `argocd app get postgresql-ha -o yaml | grep repoURL`.
+2. OCI registry not registered → apply the `bitnamicharts-oci` Secret (step 3).
+3. Cached manifest after fixing the above → `argocd app get postgresql-ha --hard-refresh`.
+
+**`MountVolume.SetUp failed … secret "postgresql-ha-credentials"/"pgpool-credentials" not found`**
+The out-of-band Secrets aren't in the `arvan` namespace yet → create them (step 2).
+kubelet retries the mount automatically once they exist.
+
+**`The POSTGRESQL_SR_CHECK_PASSWORD environment variable is empty or not set`**
+The `pgpool-credentials` Secret is missing the `sr-check-password` key (the
+postgresql pods read it from the *pgpool* secret, not their own). Recreate it
+with **both** `admin-password` and `sr-check-password`, then restart the pods:
+```bash
+kubectl -n arvan delete pod -l app.kubernetes.io/name=postgresql-ha
+```
+
+**`password authentication failed`** (as opposed to the "empty" error above)
+A data dir on a `local` PV was initialized with a *different* password than the
+Secret now holds. Wipe the dirs (see Teardown) and delete the pods to re-init.
+Note: passwords are baked into the PV data on first boot — **don't change a
+Secret after a successful init** expecting it to take effect.
 
 ## Teardown note
 
