@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ip-country-api
+  namespace: arvan
+  labels:
+    app: ip-country-api
+# Picked up automatically: monitoring/values.yaml sets
+# serviceMonitorSelectorNilUsesHelmValues=false, so Prometheus selects ALL
+# ServiceMonitors in ALL namespaces — no chart `release` label required
+# (same convention as postgres/prometheus-rules.yaml).
+spec:
+  selector:
+    matchLabels:
+      app: ip-country-api          # matches the Service's labels
+  namespaceSelector:
+    matchNames:
+      - arvan
+  endpoints:
+    - port: http                   # the Service's named port (-> pod :8000)
+      path: /metrics
+      interval: 30s

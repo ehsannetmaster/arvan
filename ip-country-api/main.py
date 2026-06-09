@@ -9,6 +9,8 @@ import ipaddress
 
 from fastapi import FastAPI, HTTPException
 from geoip2fast import GeoIP2Fast
+from prometheus_client import Counter
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 # Load the geolocation database once at startup; it is reused for every request.
@@ -19,6 +21,19 @@ app = FastAPI(
     description="Resolve an IP address to its country, fully offline.",
     version="1.0.0",
 )
+
+# Domain metric: how many lookups resolved to each country. Cardinality is
+# bounded (~250 country codes + a few private/reserved markers), so a label per
+# country_code is safe. HTTP request count/latency are added by Instrumentator.
+LOOKUPS = Counter(
+    "ip_country_lookups_total",
+    "Total IP-to-country lookups, labelled by resolved country code.",
+    ["country_code"],
+)
+
+# Auto-instrument every request (http_request_duration_seconds, _requests_total,
+# in-progress, etc.) and expose them at GET /metrics in Prometheus text format.
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 
 class CountryResponse(BaseModel):
@@ -36,6 +51,8 @@ def _lookup(ip: str) -> CountryResponse:
         raise HTTPException(status_code=400, detail=f"'{ip}' is not a valid IP address")
 
     result = geoip.lookup(ip)
+    country_code = result.country_code or "unknown"
+    LOOKUPS.labels(country_code=country_code).inc()
     return CountryResponse(
         ip=ip,
         country_code=result.country_code or "",

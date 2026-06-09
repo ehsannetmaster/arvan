@@ -21,6 +21,7 @@ http://127.0.0.1:8000/docs.
 | GET    | `/country/{ip}`     | `/country/8.8.8.8`                   |
 | GET    | `/country?ip=...`   | `/country?ip=8.8.8.8`                |
 | GET    | `/health`           | liveness probe                       |
+| GET    | `/metrics`          | Prometheus metrics (scraped)         |
 
 ### Example
 
@@ -46,6 +47,45 @@ Invalid input returns `400`; private/reserved ranges are flagged via
 docker build -t ip-country-api .
 docker run -p 8000:8000 ip-country-api
 ```
+
+## Metrics (Prometheus)
+
+The app exposes Prometheus metrics at **`GET /metrics`**, scraped by the
+kube-prometheus-stack Operator via [k8s/servicemonitor.yaml](k8s/servicemonitor.yaml).
+No `release` label is needed — Prometheus runs with
+`serviceMonitorSelectorNilUsesHelmValues: false` (see `monitoring/values.yaml`).
+
+| Metric | Type | Notes |
+|--------|------|-------|
+| `ip_country_lookups_total{country_code}` | counter | lookups per resolved country (custom) |
+| `http_requests_total{handler,method,status}` | counter | requests per endpoint/status |
+| `http_request_duration_seconds_*` | histogram | request latency |
+| `http_requests_inprogress` | gauge | in-flight requests |
+
+### Useful PromQL
+
+```promql
+# request rate per endpoint
+sum by (handler) (rate(http_requests_total[5m]))
+
+# top countries looked up (last hour)
+topk(10, sum by (country_code) (increase(ip_country_lookups_total[1h])))
+
+# p95 latency
+histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+
+# error ratio
+sum(rate(http_requests_total{status=~"4xx|5xx"}[5m]))
+  / sum(rate(http_requests_total[5m]))
+```
+
+After deploy, confirm Prometheus is scraping at
+`https://prometheus.idistance.ir` → **Status → Targets** (look for
+`serviceMonitor/arvan/ip-country-api`).
+
+> `/metrics` is also reachable through the public ingress (path `/`). For a lab
+> that's fine; to hide it, block `/metrics` at the external nginx or split it to
+> a separate non-ingressed port.
 
 ## CI/CD + GitOps deploy
 
