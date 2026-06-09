@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ip-country-api
+  namespace: arvan
+# No `tls:` block on purpose — TLS is terminated at the external nginx, which
+# forwards plain HTTP to ingress-nginx on the workers' :80 and preserves the
+# Host header. ingress-nginx then routes by that Host to this service.
+# (Same model as argocd-ingress.md.)
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ip-country.idistance.ir
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ip-country-api
+                port:
+                  number: 80

@@ -1,0 +1,66 @@
+name: ip-country-api CI
+
+# Build + push the image whenever the app's source changes, then write the new
+# image tag back into the k8s manifest (GitOps). Argo CD then shows the app
+# OutOfSync; you sync it manually, matching the rest of this repo.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'ip-country-api/**'
+      - '.github/workflows/ip-country-api.yml'
+
+permissions:
+  contents: write      # push the image-tag commit back to the repo
+  packages: write      # push the image to GHCR
+
+jobs:
+  build-and-update:
+    runs-on: self-hosted
+
+    # Safety net: never re-trigger on our own image-tag commit.
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/ip-country-api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build image
+        working-directory: ip-country-api
+        run: |
+          docker build \
+            -t "${IMAGE}:${{ steps.tag.outputs.sha }}" \
+            -t "${IMAGE}:latest" \
+            .
+
+      - name: Push image
+        run: |
+          docker push "${IMAGE}:${{ steps.tag.outputs.sha }}"
+          docker push "${IMAGE}:latest"
+
+      - name: Update manifest image tag
+        run: |
+          sed -i -E "s|(image: ghcr.io/${{ github.repository_owner }}/ip-country-api):.*|\1:${{ steps.tag.outputs.sha }}|" \
+            ip-country-api/k8s/deployment.yaml
+
+      - name: Commit pinned tag back to repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- ip-country-api/k8s/deployment.yaml; then
+            echo "Image tag unchanged; nothing to commit."
+            exit 0
+          fi
+          git add ip-country-api/k8s/deployment.yaml
+          git commit -m "ci: pin ip-country-api image to ${{ steps.tag.outputs.sha }} [skip ci]"
+          git push origin HEAD:master

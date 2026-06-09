@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ip-country-api
+  namespace: arvan
+  labels:
+    app: ip-country-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ip-country-api
+  template:
+    metadata:
+      labels:
+        app: ip-country-api
+    spec:
+      containers:
+        - name: ip-country-api
+          # The tag below is rewritten by CI (.github/workflows/ip-country-api.yml)
+          # to the built commit SHA on every push, then committed back to git.
+          image: ghcr.io/ehsannetmaster/ip-country-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
