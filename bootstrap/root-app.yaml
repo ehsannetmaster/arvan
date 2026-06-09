@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # App-of-apps: watches apps/ and creates the child Application(s) it finds there
+  # (kube-prometheus-stack). Sync is MANUAL — applying this file registers the
+  # root app, then you sync it to create the child app, then sync the child.
+  source:
+    repoURL: https://github.com/ehsannetmaster/arvan.git
+    targetRevision: HEAD
+    path: apps
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  # No syncPolicy.automated — child Applications are created only when you
+  # manually sync this root app.

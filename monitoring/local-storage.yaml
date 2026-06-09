@@ -1,0 +1,97 @@
+# Static `local` storage on node3 (100.64.231.103) — NO dynamic provisioner.
+#
+# Each PV is a pre-created directory on node3, pinned there by nodeAffinity. The
+# StorageClass uses kubernetes.io/no-provisioner + WaitForFirstConsumer so the
+# scheduler honours that node affinity (pods land on node3, then the PVC binds).
+#
+# PREREQUISITE — create the directories on node3 BEFORE syncing (no provisioner
+# will mkdir them for you):
+#   ssh node3 'sudo mkdir -p /mnt/local-storage/{prometheus,grafana,alertmanager} \
+#              && sudo chmod 0777 /mnt/local-storage/*'
+#
+# Sizes match the PVC requests in monitoring/values.yaml exactly, so the volume
+# binder pairs each PVC with its one correct PV (smallest sufficient match):
+#   prometheus 10Gi · grafana 5Gi · alertmanager 2Gi
+#
+# NOTE: `local` PVs only support reclaimPolicy: Retain. If you delete the stack
+# and recreate it, clear the leftover data dirs on node3 (or the PVs stay
+# "Released" and won't rebind).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-storage
+  annotations:
+    # Apply storage before the chart's PVCs when synced as one Application.
+    argocd.argoproj.io/sync-wave: "-5"
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: local-pv-prometheus
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/local-storage/prometheus
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["node3"]   # verify with `kubectl get nodes`
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: local-pv-grafana
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/local-storage/grafana
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["node3"]
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: local-pv-alertmanager
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/local-storage/alertmanager
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["node3"]

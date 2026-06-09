@@ -1,0 +1,9 @@
+# Ignore everything at the repo root by default...
+/*
+
+# ...then re-include only the GitOps directories (and this file).
+# Once a directory is un-ignored, all files inside it are tracked.
+!/.gitignore
+!/apps/
+!/bootstrap/
+!/monitoring/

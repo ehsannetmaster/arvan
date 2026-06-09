@@ -1,0 +1,117 @@
+# kube-prometheus-stack values — Arvan lab cluster
+# Chart: kube-prometheus-stack 86.2.0  (prometheus-operator v0.91.0)
+#
+# Cluster conventions (see kube-prometheus-stack-argocd.md / argocd-ingress.md):
+#   * TLS is terminated at the EXTERNAL nginx; ingress-nginx speaks plain HTTP.
+#     -> no `tls:` blocks here; Ingresses use *.idistance.ir + ingressClassName nginx.
+#   * No LoadBalancer (no MetalLB) -> every Service stays ClusterIP, reached via Ingress.
+#   * Persistence uses the static `local-storage` StorageClass — pre-created
+#     `local` PVs on node3 (no provisioner). Sizes below MUST match the PVs.
+
+fullnameOverride: kps
+
+#############################################
+# Grafana
+#############################################
+grafana:
+  enabled: true
+  # CHANGE THIS before applying (or point to an existing secret with admin.existingSecret).
+  adminPassword: "ChangeMe-Admin-123"
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.idistance.ir
+    path: /
+    pathType: Prefix
+    # No tls: — TLS is offloaded at the external nginx.
+
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: local-storage
+    accessModes: ["ReadWriteOnce"]
+    size: 5Gi
+
+  # Grafana sits behind the external nginx (https). Tell it its public URL so it
+  # builds correct https links/redirects regardless of the proxy hop scheme.
+  grafana.ini:
+    server:
+      root_url: https://grafana.idistance.ir
+
+#############################################
+# Prometheus
+#############################################
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - prometheus.idistance.ir
+    paths:
+      - /
+    pathType: Prefix
+
+  prometheusSpec:
+    externalUrl: https://prometheus.idistance.ir
+    retention: 15d
+    retentionSize: "8GB"
+    # In a lab you often add ServiceMonitors/Rules without the chart's release
+    # label — tell Prometheus to pick up ALL of them, not just the chart's own.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-storage
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+#############################################
+# Alertmanager
+#############################################
+alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - alertmanager.idistance.ir
+    paths:
+      - /
+    pathType: Prefix
+
+  alertmanagerSpec:
+    externalUrl: https://alertmanager.idistance.ir
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-storage
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+#############################################
+# Control-plane component scraping (Kubespray specifics)
+#############################################
+# Kubespray binds kube-controller-manager / kube-scheduler / kube-proxy metrics
+# to 127.0.0.1 by default, so these targets show DOWN in Prometheus until you
+# flip their bind-address to 0.0.0.0 cluster-side. Left enabled — see the doc's
+# "Known gaps" section for the kubespray vars to change.
+kubeControllerManager:
+  service:
+    enabled: true
+kubeScheduler:
+  service:
+    enabled: true
+
+# etcd needs client certs to scrape on kubespray. Disabled to avoid a permanent
+# "etcd down" alert; enable + wire certs later if you want etcd metrics.
+kubeEtcd:
+  enabled: false

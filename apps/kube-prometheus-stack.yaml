@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Multi-source:
+  #   1) the chart from the prometheus-community Helm repo,
+  #   2) THIS git repo as the $arvan ref (provides monitoring/values.yaml),
+  #   3) THIS git repo again rendering the static StorageClass + PVs manifest.
+  # Source 3 replaces the former standalone local-storage Application; the
+  # manifest carries sync-wave "-5" so the StorageClass/PVs land before the chart.
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 86.2.0
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $arvan/monitoring/values.yaml
+    - repoURL: https://github.com/ehsannetmaster/arvan.git
+      targetRevision: HEAD
+      ref: arvan
+    - repoURL: https://github.com/ehsannetmaster/arvan.git
+      targetRevision: HEAD
+      path: monitoring
+      directory:
+        include: local-storage.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  # No `automated:` block — sync is MANUAL. Argo CD will show the app as
+  # OutOfSync until you sync it (UI Sync button, or `argocd app sync
+  # kube-prometheus-stack`). Add `--prune` at sync time to remove orphans.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      # MANDATORY: the prometheus-operator CRDs exceed the 262144-byte annotation
+      # limit of client-side apply ("metadata.annotations: Too long"). Server-side
+      # apply is the supported way to install them.
+      - ServerSideApply=true
+    # CRDs settle a beat after the operator; give retries room on first sync.
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 3m
