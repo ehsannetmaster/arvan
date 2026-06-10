@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS ip_lookups (
 );
 ```
 
+**Timezone.** `ts` is `TIMESTAMPTZ` — Postgres stores an absolute instant and
+*displays* it per the session timezone. On startup the app sets the database
+default timezone to **`Asia/Tehran` (+03:30)**, so `SELECT`s (from the app or
+`psql`) show Tehran wall-clock time. The stored instant is unchanged; only the
+display zone is. (`ALTER DATABASE` applies to new sessions, so reconnect once
+after the first deploy to see it.)
+
 Connection comes from standard `PG*` env vars set in
 [k8s/deployment.yaml](k8s/deployment.yaml); `PGPASSWORD` is sourced from the
 existing `postgresql-ha-credentials` Secret (key `password` = the `appuser`

@@ -54,10 +54,22 @@ async def lifespan(app: FastAPI):
     # logging silently degrades to a no-op until the next restart.
     app.state.pool = None
     try:
-        app.state.pool = await asyncpg.create_pool(min_size=1, max_size=5, timeout=5)
+        # server_settings.timezone makes THIS app's sessions render timestamps in
+        # Tehran time (+03:30) immediately.
+        app.state.pool = await asyncpg.create_pool(
+            min_size=1,
+            max_size=5,
+            timeout=5,
+            server_settings={"timezone": "Asia/Tehran"},
+        )
         async with app.state.pool.acquire() as conn:
             await conn.execute(CREATE_TABLE)
-        logger.info("connected to postgres; ip_lookups table ready")
+            # Persist Tehran as the database default so every client (e.g. psql)
+            # also sees +03:30, not just this app. Applies to new sessions; needs
+            # appuser to own appdb (it does — the chart creates it that way).
+            db = await conn.fetchval("SELECT current_database()")
+            await conn.execute(f'ALTER DATABASE "{db}" SET timezone TO \'Asia/Tehran\'')
+        logger.info("connected to postgres; ip_lookups table ready (tz=Asia/Tehran)")
     except Exception as exc:  # noqa: BLE001
         logger.warning("postgres unavailable, request logging disabled: %s", exc)
     try:
