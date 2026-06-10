@@ -126,6 +126,17 @@ data:
           "targets": [
             { "refId": "A", "expr": "topk(10, sum by (country_code) (increase(ip_country_lookups_total[1h])))", "legendFormat": "{{country_code}}", "instant": true }
           ]
+        },
+        {
+          "type": "table", "title": "Request records (newest first)",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "options": { "showHeader": true, "sortBy": [ { "displayName": "time", "desc": true } ], "footer": { "show": false } },
+          "targets": [
+            { "refId": "A", "format": "table", "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", ip, country_code, country_name FROM ip_lookups WHERE $__timeFilter(ts) ORDER BY ts DESC LIMIT 1000;" }
+          ]
         }
       ]
     }
