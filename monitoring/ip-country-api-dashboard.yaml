@@ -118,16 +118,6 @@ data:
           ]
         },
         {
-          "type": "bargauge", "title": "Top countries (1h)",
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
-          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "continuous-GrYlRd" } }, "overrides": [] },
-          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
-          "targets": [
-            { "refId": "A", "expr": "topk(10, sum by (country_code) (increase(ip_country_lookups_total[1h])))", "legendFormat": "{{country_code}}", "instant": true }
-          ]
-        },
-        {
           "type": "table", "title": "Request records (newest first)",
           "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
           "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
