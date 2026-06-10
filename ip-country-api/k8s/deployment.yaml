@@ -19,7 +19,7 @@ spec:
         - name: ip-country-api
           # The tag below is rewritten by CI (.github/workflows/ip-country-api.yml)
           # to the built commit SHA on every push, then committed back to git.
-          image: ghcr.io/ehsannetmaster/ip-country-api:d60e469
+          image: ghcr.io/ehsannetmaster/ip-country-api:41e5f8b
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
