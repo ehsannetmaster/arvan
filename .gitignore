@@ -1,6 +1,7 @@
 # Deny everything at the repo root, then re-include only the GitOps directories.
 /*
 !/.gitignore
+!/README.md
 !/.github/
 !/apps/
 !/bootstrap/
