@@ -135,7 +135,7 @@ data:
           "options": { "showHeader": true, "sortBy": [ { "displayName": "time", "desc": true } ], "footer": { "show": false } },
           "targets": [
             { "refId": "A", "format": "table", "rawQuery": true,
-              "rawSql": "SELECT ts AS \"time\", ip, country_code, country_name FROM ip_lookups WHERE $__timeFilter(ts) ORDER BY ts DESC LIMIT 1000;" }
+              "rawSql": "SELECT ts AS \"time\", ip, country_code, country_name FROM ip_lookups ORDER BY ts DESC LIMIT 1000;" }
           ]
         }
       ]
