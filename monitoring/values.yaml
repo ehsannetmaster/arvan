@@ -72,11 +72,14 @@ grafana:
       uid: ip-lookups-pg
       access: proxy
       url: postgresql-ha-pgpool.arvan.svc.cluster.local:5432
-      database: appdb
       user: appuser
       secureJsonData:
         password: $PG_DB_PASSWORD
       jsonData:
+        # Grafana 11 reads the database from jsonData.database — the old
+        # top-level `database:` field is ignored and yields "no default
+        # database configured for this data source".
+        database: appdb
         sslmode: disable
 
 #############################################
