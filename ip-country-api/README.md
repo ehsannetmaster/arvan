@@ -48,6 +48,40 @@ docker build -t ip-country-api .
 docker run -p 8000:8000 ip-country-api
 ```
 
+## Request logging (PostgreSQL)
+
+Every successful lookup is recorded to the cluster's `postgresql-ha` database
+(reached via the Pgpool proxy `postgresql-ha-pgpool.arvan.svc:5432`, database
+`appdb`). The write runs as a FastAPI **background task**, so it never delays the
+response, and it is **fault-tolerant** — if Postgres is unreachable the API still
+serves lookups and logging silently degrades to a no-op.
+
+Table (auto-created on startup):
+
+```sql
+CREATE TABLE IF NOT EXISTS ip_lookups (
+    id           BIGSERIAL PRIMARY KEY,
+    ts           TIMESTAMPTZ NOT NULL DEFAULT now(),  -- date/time of the request
+    ip           TEXT NOT NULL,
+    country_code TEXT,
+    country_name TEXT
+);
+```
+
+Connection comes from standard `PG*` env vars set in
+[k8s/deployment.yaml](k8s/deployment.yaml); `PGPASSWORD` is sourced from the
+existing `postgresql-ha-credentials` Secret (key `password` = the `appuser`
+password), so no new secret is introduced.
+
+Inspect the recorded rows:
+
+```bash
+kubectl -n arvan exec -it postgresql-ha-postgresql-0 -- \
+  env PGPASSWORD="$(kubectl -n arvan get secret postgresql-ha-credentials -o jsonpath='{.data.password}' | base64 -d)" \
+  psql -U appuser -d appdb -c \
+  "SELECT ts, ip, country_code, country_name FROM ip_lookups ORDER BY ts DESC LIMIT 20;"
+```
+
 ## Metrics (Prometheus)
 
 The app exposes Prometheus metrics at **`GET /metrics`**, scraped by the

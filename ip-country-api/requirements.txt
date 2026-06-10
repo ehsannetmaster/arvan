@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 geoip2fast
 prometheus-fastapi-instrumentator
+asyncpg

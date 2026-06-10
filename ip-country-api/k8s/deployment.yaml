@@ -24,6 +24,25 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+          # Postgres connection (via the Pgpool proxy). asyncpg reads these
+          # standard PG* vars automatically. Password comes from the same
+          # out-of-band Secret the postgresql-ha chart uses (key: password = the
+          # appuser password). DB outages don't break the API — logging just
+          # degrades to a no-op.
+          env:
+            - name: PGHOST
+              value: postgresql-ha-pgpool.arvan.svc.cluster.local
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: appdb
+            - name: PGUSER
+              value: appuser
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-ha-credentials
+                  key: password
           readinessProbe:
             httpGet:
               path: /health
