@@ -2,8 +2,8 @@
 
 End-to-end provisioning of the Kubernetes nodes on Proxmox: first build a
 reusable Ubuntu 24.04 cloud-init **template**, then clone it into the VMs with
-**Terraform**. Creating the API user/token is covered separately in
-[proxmox-create-token.md](../proxmox-create-token.md).
+**Terraform**. Terraform authenticates to Proxmox with an API user/token (create
+one with `pveum` beforehand).
 
 ---
 
@@ -112,8 +112,8 @@ qm start 100
 ## Part 2 — Deploy VMs with Terraform
 
 The Terraform configuration in this directory clones template `9000` (from
-Part 1) into multiple VMs with static IP configuration. It needs an API
-user/token — see [proxmox-create-token.md](../proxmox-create-token.md).
+Part 1) into multiple VMs with static IP configuration. It authenticates with a
+Proxmox API user/token (see `terraform.tfvars` below).
 
 ### Overview
 

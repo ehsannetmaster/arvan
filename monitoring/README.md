@@ -139,7 +139,7 @@ Key settings in `values.yaml` → `prometheus.prometheusSpec`:
 ## Exposure
 
 Grafana / Prometheus / Alertmanager are exposed via ingress-nginx behind the same
-external nginx TLS-offload proxy used elsewhere (`argocd-ingress.md`). Each
+external nginx TLS-offload proxy used elsewhere (`../bootstrap/README.md`). Each
 Service stays ClusterIP (no MetalLB); the chart Ingresses use
 `ingressClassName: nginx` and `*.idistance.ir` hostnames with **no `tls:`** block
 — TLS terminates at the external nginx, which forwards plain HTTP to the worker
@@ -162,7 +162,7 @@ server {
     listen 443 ssl http2;
     ssl_certificate     /home/damavand/fullchain.pem;
     ssl_certificate_key /home/damavand/privkey.pem;
-    server_name grafana.idistance.ir prometheus.idistance.ir alertmanager.idistance.ir ip-country.idistance.ir;
+    server_name argo.idistance.ir grafana.idistance.ir prometheus.idistance.ir alertmanager.idistance.ir ip-country.idistance.ir;
 
     location / {
         proxy_set_header Host              $host;

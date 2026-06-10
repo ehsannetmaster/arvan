@@ -1,8 +1,5 @@
-# Ignore everything at the repo root by default...
+# Deny everything at the repo root, then re-include only the GitOps directories.
 /*
-
-# ...then re-include only the GitOps directories (and this file).
-# Once a directory is un-ignored, all files inside it are tracked.
 !/.gitignore
 !/.github/
 !/apps/
@@ -12,12 +9,10 @@
 !/ip-country-api/
 !/kubespray/
 !/terraform/
-# ...but never commit Terraform secrets, state, or local cache.
-/terraform/terraform.tfvars
-/terraform/*.auto.tfvars
-/terraform/*.tfstate
-/terraform/*.tfstate.*
-/terraform/.terraform/
+
+# ...but never commit Terraform secrets, state, plans, or local cache.
+/terraform/*.tfvars
+/terraform/*.tfstate*
 /terraform/*.tfplan
-/terraform/crash.log
-/terraform/crash.*.log
+/terraform/.terraform/
+/terraform/crash*.log
