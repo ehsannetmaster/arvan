@@ -166,12 +166,8 @@ ingress_nginx_host_network: true
 - **Gateway API was disabled** in favour of classic **Ingress**. On the default Calico CNI, kubespray does not deploy a Gateway *controller* (only CRDs), so Gateway API would have needed a controller installed manually. Ingress is simpler for this cluster.
 - **`ingress_nginx_host_network: true`** makes the ingress-nginx controller bind **ports 80/443 directly on the node IPs** (hostPort), instead of via a `LoadBalancer` service. Kubespray sets `dnsPolicy: ClusterFirstWithHostNet` automatically.
 - **No MetalLB needed** — host-network ingress doesn't use `LoadBalancer`-type services. (Add MetalLB only if other workloads need external IPs.)
-- **Recommended:** pin the ingress controller to the worker nodes so you control which IPs serve 80/443 (by default the DaemonSet may also land on the control plane):
-  ```yaml
-  ingress_nginx_nodeselector:
-    node-role.kubernetes.io/worker: ""   # verify the exact var/label for v2.30.0
-  ```
-- **Client access:** point external DNS / an upstream L4 LB at the worker node IPs (`100.64.231.102`, `100.64.231.103`) on 80/443. Round-robin or front them with your own proxy for redundancy.
+- **All three nodes are workers**, so host-network ingress-nginx runs on every node and listens on `:80`/`:443` on each node IP. No node-selector pinning is needed — there are no control-plane-only nodes to exclude.
+- **Client access:** point external DNS / an upstream L4 LB at **all three** node IPs (`100.64.231.101`, `100.64.231.102`, `100.64.231.103`) on 80/443. Round-robin or front them with your own proxy for redundancy.
 
 ---
 

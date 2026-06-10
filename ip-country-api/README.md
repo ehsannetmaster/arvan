@@ -175,9 +175,10 @@ push to master (ip-country-api/**)
 3. **Argo CD**: sync the `root` app once so it creates the `ip-country-api`
    child app, then sync that child (`argocd app sync ip-country-api`).
 4. **External nginx**: add a `server` block for `ip-country.idistance.ir`
-   (copy the argo one), proxying to the workers `100.64.231.102/.103` on `:80`:
+   (copy the argo one), proxying to the workers `100.64.231.101/.102/.103` on `:80`:
    ```nginx
    upstream ip-country-upstream {
+       server 100.64.231.101;       # worker node1 (ingress-nginx :80)
        server 100.64.231.102;       # worker node2 (ingress-nginx :80)
        server 100.64.231.103;       # worker node3 (ingress-nginx :80)
        keepalive 10;
