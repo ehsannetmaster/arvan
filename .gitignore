@@ -12,7 +12,6 @@
 !/ip-country-api/
 !/kubespray/
 !/terraform/
-
 # ...but never commit Terraform secrets, state, or local cache.
 /terraform/terraform.tfvars
 /terraform/*.auto.tfvars

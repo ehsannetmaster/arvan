@@ -10,8 +10,8 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint  = var.proxmox_endpoint  # e.g. "https://192.168.1.10:8006/"
-  api_token = var.proxmox_api_token # "automation@pve!mytoken=xxxxxxxx-xxxx-..."
+  endpoint  = var.proxmox_endpoint
+  api_token = var.proxmox_api_token
   insecure  = true                  # set false if you have a valid TLS cert
 
   # Required for some operations (disk import, file uploads) — uses SSH.
