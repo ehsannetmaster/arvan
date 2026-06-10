@@ -45,7 +45,8 @@ Argo CD rolls out the actual services:
 - **PostgreSQL HA** — Bitnami `postgresql-ha` (repmgr + Pgpool-II).
   → [postgres/README.md](postgres/README.md)
 - **ip-country-api** — a small FastAPI demo service, built and pushed by CI,
-  then synced by Argo CD.
+  then synced by Argo CD. It exposes Prometheus metrics that are visualized in
+  the **IP Country API** dashboard in Grafana.
   → [ip-country-api/README.md](ip-country-api/README.md)
 
 ---
