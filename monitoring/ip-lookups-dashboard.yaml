@@ -1,0 +1,109 @@
+# Grafana dashboard showing the ip-country-api request log stored in PostgreSQL
+# (the `ip_lookups` table in `appdb`). Unlike ip-country-api-dashboard.yaml
+# (which reads Prometheus metrics), this one queries the Postgres data source
+# `ip-lookups-pg` defined under grafana.additionalDataSources in
+# monitoring/values.yaml.
+#
+# Delivery: the Grafana dashboard SIDECAR imports any ConfigMap in the monitoring
+# namespace labelled `grafana_dashboard: "1"`. JSON is embedded (no gnetId), so
+# nothing is fetched at runtime. Add this filename to the `include:` glob in
+# apps/kube-prometheus-stack.yaml so the app renders it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ip-lookups-dashboard
+  labels:
+    grafana_dashboard: "1"
+data:
+  ip-lookups.json: |-
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 0,
+      "title": "IP Country API — Request Log (Postgres)",
+      "uid": "ip-lookups-db",
+      "tags": ["ip-country", "arvan", "postgres"],
+      "schemaVersion": 39,
+      "time": { "from": "now-24h", "to": "now" },
+      "refresh": "30s",
+      "templating": { "list": [] },
+      "panels": [
+        {
+          "type": "stat", "title": "Total records",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [
+            { "refId": "A", "format": "table", "rawQuery": true,
+              "rawSql": "SELECT count(*) AS total FROM ip_lookups;" }
+          ]
+        },
+        {
+          "type": "stat", "title": "Records (selected range)",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [
+            { "refId": "A", "format": "table", "rawQuery": true,
+              "rawSql": "SELECT count(*) AS total FROM ip_lookups WHERE $__timeFilter(ts);" }
+          ]
+        },
+        {
+          "type": "stat", "title": "Distinct countries (range)",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [
+            { "refId": "A", "format": "table", "rawQuery": true,
+              "rawSql": "SELECT count(DISTINCT country_code) AS countries FROM ip_lookups WHERE $__timeFilter(ts);" }
+          ]
+        },
+        {
+          "type": "stat", "title": "Distinct IPs (range)",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [
+            { "refId": "A", "format": "table", "rawQuery": true,
+              "rawSql": "SELECT count(DISTINCT ip) AS ips FROM ip_lookups WHERE $__timeFilter(ts);" }
+          ]
+        },
+        {
+          "type": "timeseries", "title": "Lookups over time",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60 } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+          "targets": [
+            { "refId": "A", "format": "time_series", "rawQuery": true,
+              "rawSql": "SELECT $__timeGroupAlias(ts, '$__interval'), count(*) AS lookups FROM ip_lookups WHERE $__timeFilter(ts) GROUP BY 1 ORDER BY 1;" }
+          ]
+        },
+        {
+          "type": "barchart", "title": "Top countries (range)",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+          "options": { "orientation": "horizontal", "xField": "country", "legend": { "showLegend": false } },
+          "targets": [
+            { "refId": "A", "format": "table", "rawQuery": true,
+              "rawSql": "SELECT coalesce(nullif(country_name, ''), 'Unknown') AS country, count(*) AS lookups FROM ip_lookups WHERE $__timeFilter(ts) GROUP BY 1 ORDER BY 2 DESC LIMIT 10;" }
+          ]
+        },
+        {
+          "type": "table", "title": "Recent requests (latest 100)",
+          "datasource": { "type": "postgres", "uid": "ip-lookups-pg" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "options": { "showHeader": true, "sortBy": [ { "displayName": "time", "desc": true } ] },
+          "targets": [
+            { "refId": "A", "format": "table", "rawQuery": true,
+              "rawSql": "SELECT ts AS \"time\", ip, country_code, country_name FROM ip_lookups ORDER BY ts DESC LIMIT 100;" }
+          ]
+        }
+      ]
+    }

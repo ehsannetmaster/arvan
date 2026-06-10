@@ -80,7 +80,14 @@ Connection comes from standard `PG*` env vars set in
 existing `postgresql-ha-credentials` Secret (key `password` = the `appuser`
 password), so no new secret is introduced.
 
-Inspect the recorded rows:
+**In Grafana:** a PostgreSQL data source (`ip-lookups-pg`) and a SQL dashboard
+**"IP Country API — Request Log (Postgres)"** are provisioned via
+`monitoring/values.yaml` + `monitoring/ip-lookups-dashboard.yaml`. It shows total
+records, lookups over time, top countries, and the latest 100 requests. The DB
+password is injected from an out-of-band Secret `ip-lookups-db` in the
+`monitoring` namespace (see the comment in `monitoring/values.yaml`).
+
+Inspect the recorded rows from the CLI:
 
 ```bash
 kubectl -n arvan exec -it postgresql-ha-postgresql-0 -- \

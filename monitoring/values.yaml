@@ -50,6 +50,35 @@ grafana:
     server:
       root_url: https://grafana.idistance.ir
 
+  # Inject the ip_lookups DB password as an env var, sourced from a Secret
+  # created OUT OF BAND in the `monitoring` namespace (this is a PUBLIC repo, and
+  # the postgresql-ha-credentials Secret lives in `arvan` — secretKeyRef cannot
+  # cross namespaces). Create it once on the cluster:
+  #   kubectl -n monitoring create secret generic ip-lookups-db \
+  #     --from-literal=password="$(kubectl -n arvan get secret postgresql-ha-credentials \
+  #       -o jsonpath='{.data.password}' | base64 -d)"
+  envValueFrom:
+    PG_DB_PASSWORD:
+      secretKeyRef:
+        name: ip-lookups-db
+        key: password
+
+  # PostgreSQL data source for the ip-country-api request log. The password is
+  # interpolated from the env var above ($PG_DB_PASSWORD) — never stored here.
+  # Reached cross-namespace via the Pgpool proxy FQDN.
+  additionalDataSources:
+    - name: ip-lookups
+      type: postgres
+      uid: ip-lookups-pg
+      access: proxy
+      url: postgresql-ha-pgpool.arvan.svc.cluster.local:5432
+      database: appdb
+      user: appuser
+      secureJsonData:
+        password: $PG_DB_PASSWORD
+      jsonData:
+        sslmode: disable
+
 #############################################
 # Prometheus
 #############################################
