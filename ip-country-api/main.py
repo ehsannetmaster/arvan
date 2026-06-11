@@ -138,7 +138,7 @@ async def _log_request(ip: str, country_code: str, country_name: str) -> None:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    # Liveness/readiness probe target — also handy as a CI smoke check.
+    # Liveness/readiness probe target.
     return {"status": "ok"}
 
 
